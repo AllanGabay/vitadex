@@ -1,1 +1,39 @@
+# Dépendances
 node_modules/
+
+# Production build
+/build
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Systèmes d'exploitation
+.DS_Store
+Thumbs.db
+
+# IDE / éditeurs
+.vscode/
+.idea/
+
+# Environnements
+.env
+.env.local
+.env.development
+.env.production
+.env.test
+
+# Firebase
+.firebase/
+.firebaserc
+
+# Next.js (si utilisé)
+.next
+out/
+
+# Tests
+coverage/
+
+# Divers
+*.local
