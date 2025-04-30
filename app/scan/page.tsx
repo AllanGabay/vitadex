@@ -2,11 +2,9 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { auth, storage, functions } from '../../lib/firebaseClient';
+import { auth, db } from '../../lib/firebaseClient';
 import { onAuthStateChanged } from 'firebase/auth';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { httpsCallable } from 'firebase/functions';
-import { v4 as uuidv4 } from 'uuid';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
 export default function ScanPage() {
   const router = useRouter();
@@ -54,19 +52,29 @@ export default function ScanPage() {
     if (!imageFile || !location || !user) return;
     setLoading(true);
     try {
-      const rawId = uuidv4();
-      const storageRef = ref(storage, `${user.uid}/raw/${rawId}.jpg`);
-      await uploadBytes(storageRef, imageFile);
-      const imageUrl = await getDownloadURL(storageRef);
-      const analyzeFn = httpsCallable(functions, 'analyzeScan');
-      const result = await analyzeFn({
-        uid: user.uid,
-        imageUrl,
-        latitude: location.latitude,
-        longitude: location.longitude
-      });
-      const docId = (result.data as any).docId;
-      router.push(`/card/${docId}`);
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64 = (reader.result as string).split(',')[1];
+        const res = await fetch('/api/analyzeScan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            imageBase64: base64,
+            latitude: location.latitude,
+            longitude: location.longitude
+          })
+        });
+        const { metadata, bgBase64, subjBase64 } = await res.json();
+        const docRef = await addDoc(collection(db, 'cards'), {
+          uid: user.uid,
+          ...metadata,
+          backgroundUrl: `data:image/png;base64,${bgBase64}`,
+          subjectUrl: `data:image/png;base64,${subjBase64}`,
+          createdAt: serverTimestamp()
+        });
+        router.push(`/card/${docRef.id}`);
+      };
+      reader.readAsDataURL(imageFile);
     } catch (error) {
       console.error('Erreur lors de l\'analyse :', error);
     } finally {

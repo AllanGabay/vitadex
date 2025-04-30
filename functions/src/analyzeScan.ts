@@ -1,12 +1,12 @@
 import * as functions from 'firebase-functions';
-import { Configuration, OpenAIApi } from 'openai';
+import OpenAI from 'openai';
 import { v4 as uuidv4 } from 'uuid';
 import { Prompt1, Prompt2, Prompt3 } from '../../lib/prompts';
 import { adminDb, adminStorage } from './firebaseAdmin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { Buffer } from 'buffer';
 
-const openai = new OpenAIApi(new Configuration({ apiKey: process.env.OPENAI_API_KEY! }));
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
 export const analyzeScan = functions.https.onCall(async (data, context) => {
   const { uid, imageUrl, latitude, longitude } = data;
@@ -22,9 +22,13 @@ export const analyzeScan = functions.https.onCall(async (data, context) => {
       { role: 'user', content: imageUrl }
     ]
   });
+  const content = gptResponse.choices?.[0]?.message?.content;
+  if (!content) {
+    throw new functions.https.HttpsError('internal', 'Empty GPT response content');
+  }
   let metadata: any;
   try {
-    metadata = JSON.parse(gptResponse.choices[0].message.content);
+    metadata = JSON.parse(content);
   } catch (err) {
     throw new functions.https.HttpsError('internal', 'Failed to parse GPT response');
   }
@@ -34,19 +38,25 @@ export const analyzeScan = functions.https.onCall(async (data, context) => {
   const bgResp = await openai.images.generate({
     prompt: Prompt2.replace('{continent}', continent).replace('{biome}', biome),
     n: 1,
-    size: '400x250',
+    size: '512x512',
     response_format: 'b64_json'
   });
-  const bgBuffer = Buffer.from(bgResp.data[0].b64_json!, 'base64');
+  if (!bgResp.data || bgResp.data.length === 0 || !bgResp.data[0].b64_json) {
+    throw new functions.https.HttpsError('internal', 'Failed to generate background image');
+  }
+  const bgBuffer = Buffer.from(bgResp.data[0].b64_json, 'base64');
 
   // 3. Sujet PNG
   const subjResp = await openai.images.generate({
     prompt: Prompt3.replace('{continent}', continent),
     n: 1,
-    size: '400x250',
+    size: '512x512',
     response_format: 'b64_json'
   });
-  const subjBuffer = Buffer.from(subjResp.data[0].b64_json!, 'base64');
+  if (!subjResp.data || subjResp.data.length === 0 || !subjResp.data[0].b64_json) {
+    throw new functions.https.HttpsError('internal', 'Failed to generate subject image');
+  }
+  const subjBuffer = Buffer.from(subjResp.data[0].b64_json, 'base64');
 
   // 4. Upload images
   const cardId = uuidv4();
