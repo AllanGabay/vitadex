@@ -5,13 +5,14 @@ import { useRouter } from 'next/navigation';
 import { auth, db } from '../../lib/firebaseClient';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import exifr from 'exifr';
 
 export default function ScanPage() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string>('');
-  const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [exifCoords, setExifCoords] = useState<{ latitude: number; longitude: number } | null>(null);
   const [loading, setLoading] = useState(false);
   const captureInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
@@ -31,16 +32,21 @@ export default function ScanPage() {
     if (imageFile) {
       const url = URL.createObjectURL(imageFile);
       setPreviewUrl(url);
+      exifr.gps(imageFile)
+        .then(({ latitude, longitude }) => {
+          if (latitude != null && longitude != null) {
+            setExifCoords({ latitude, longitude });
+          } else {
+            setExifCoords(null);
+            console.warn('Aucune coordonnée GPS dans l’image');
+          }
+        })
+        .catch(err => {
+          setExifCoords(null);
+          console.error('Erreur EXIF GPS:', err);
+        });
     }
   }, [imageFile]);
-
-  useEffect(() => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition((pos) => {
-        setLocation({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
-      });
-    }
-  }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -49,22 +55,30 @@ export default function ScanPage() {
   };
 
   const handleAnalyze = async () => {
-    if (!imageFile || !location || !user) return;
+    if (!imageFile || !exifCoords || !user) return;
     setLoading(true);
     try {
       const reader = new FileReader();
       reader.onload = async () => {
         const base64 = (reader.result as string).split(',')[1];
+        const { latitude, longitude } = exifCoords;
         const res = await fetch('/api/analyzeScan', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             imageBase64: base64,
-            latitude: location.latitude,
-            longitude: location.longitude
+            latitude,
+            longitude
           })
         });
-        const { metadata, bgBase64, subjBase64 } = await res.json();
+        const data = await res.json();
+        if (!res.ok) {
+          console.error('AnalyseScan API error:', data.error || res.status);
+          alert(`Erreur d'analyse : ${data.error || res.status}`);
+          setLoading(false);
+          return;
+        }
+        const { metadata, bgBase64, subjBase64 } = data;
         const docRef = await addDoc(collection(db, 'cards'), {
           uid: user.uid,
           ...metadata,
