@@ -7,7 +7,7 @@ import { adminDb } from 'lib/firebaseAdmin';
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
 export async function POST(req: Request) {
-  console.log('⚡️ analyzeScan handler start');
+  console.log('⚡ analyzeScan start');
   // Debug: list available models for this API key
   try {
     const modelList = await openai.models.list();
@@ -62,14 +62,45 @@ export async function POST(req: Request) {
           properties: {
             nom_commun: { type: 'string' },
             nom_scientifique: { type: 'string' },
-            categorie: { type: 'string', enum: ['Oiseau','Mammifère','Insecte','Plante','Reptile','Amphibien','Poisson','Fongus','Autre'] },
-            biome: { type: 'string', enum: ['Forêt','Désert','Marin','Urbain','Cosmopolite','Montagne','Prairie','Eau douce','Toundra'] },
+            categorie: {
+              type: 'string',
+              enum: [
+                'Mammifère',
+                'Oiseau',
+                'Reptile',
+                'Amphibien',
+                'Poisson',
+                'Insecte',
+                'Arachnide',
+                'Mollusque',
+                'Crustacé',
+                'Plante',
+                'Champignon'
+              ]
+            },
+            biome: {
+              type: 'string',
+              enum: [
+                'Forêt',
+                'Savane/Prairie',
+                'Désert',
+                'Montagne/Rocheux',
+                'Eau douce',
+                'Milieu marin',
+                'Souterrain/Caverne',
+                'Urbain',
+                'Toundra/Polaire'
+              ]
+            },
             continent: { type: 'string' },
             traits: { type: 'array', items: { type: 'string' }, minItems: 4, maxItems: 4 },
             taille_moyenne: { type: 'string' },
             esperance_vie: { type: 'string' },
             description_professionnelle: { type: 'string' },
-            niveau_de_rarete: { type: 'string', enum: ['Commun','Peu commun','Rare','Très rare','Exceptionnel'] },
+            niveau_de_rarete: {
+              type: 'string',
+              enum: ['Commune', 'Peu commune', 'Rare', 'Légendaire']
+            },
             html_card: { type: 'string' }
           },
           required: ['nom_commun','nom_scientifique','categorie','biome','continent','traits','taille_moyenne','esperance_vie','description_professionnelle','niveau_de_rarete','html_card']
@@ -112,16 +143,26 @@ export async function POST(req: Request) {
     }
 
     // helper pour mapper continent en style pour DALL·E
-    const continent_style = (c: string) => {
-      switch (c) {
-        case 'Europe': return 'elegant watercolor';
-        case 'Amérique Nord': return '19th-century botanical';
-        case 'Afrique': return 'warm earthy tones';
-        case 'Asie': return 'minimal ink lines';
-        case 'Océanie': return 'vivid marine palette';
-        default: return 'fantasy naturalist';
-      }
-    };
+      const continent_style = (c: string) => {
+        switch (c) {
+          case 'Afrique':
+            return 'warm earthy tones';
+          case 'Europe':
+            return 'elegant watercolor';
+          case 'Asie':
+            return 'minimal ink lines';
+          case 'Amérique du Nord':
+            return '19th-century botanical';
+          case 'Amérique du Sud':
+            return 'lush rainforest palette';
+          case 'Océanie':
+            return 'vivid marine palette';
+          case 'Antarctique':
+            return 'icy desaturated hues';
+          default:
+            return 'fantasy naturalist';
+        }
+      };
 
     // Étape 2a : génération de l'arrière-plan via DALL·E
     const style = continent_style(metadata.continent);
