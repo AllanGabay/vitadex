@@ -7,7 +7,7 @@ import { adminDb } from 'lib/firebaseAdmin';
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
 export async function POST(req: Request) {
-  console.log('⚡️ analyzeScan handler start');
+  console.log('⚡ analyzeScan start');
   // Debug: list available models for this API key
   try {
     const modelList = await openai.models.list();
